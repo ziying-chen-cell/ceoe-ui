@@ -67,11 +67,6 @@ sidebar = html.Div([
     html.Div("PHASE 2", className="nav-label mt-4"),
     nav_button("My Enrollment", "phase2-student", "②"),
     nav_button("Dynamic Adjustment", "phase2-adjust", "↻"),
-
-    html.Div([
-        html.Div("Prototype status", className="small text-uppercase fw-semibold text-muted"),
-        html.Div("UI ready · Backend mock", className="small mt-1")
-    ], className="sidebar-status mt-auto")
 ], className="sidebar")
 
 header = html.Div([
