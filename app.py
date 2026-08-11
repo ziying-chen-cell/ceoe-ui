@@ -123,6 +123,14 @@ course_options = [
     for r in COURSES.itertuples()
 ]
 
+# Foundation/prerequisite courses a student may have already completed. Mirrors
+# the backend's FOUNDATION_COURSES set, which gates elective eligibility.
+FOUNDATION_COURSES = [
+    "INDENG 221", "INDENG 222", "INDENG 240", "INDENG 241", "INDENG 242", "INDENG 242A",
+]
+
+N_RANKS = 5
+
 student_page = html.Div([
     section_title(
         "Phase 1 · Student Preference Ranking",
@@ -149,11 +157,23 @@ student_page = html.Div([
                     options=[{"label": "Graduating this academic year", "value": "yes"}],
                     value=[],
                     className="mt-3"
+                ),
+                dbc.Label("Completed prerequisite courses", className="mt-3"),
+                dcc.Dropdown(
+                    id="completed-courses",
+                    options=[{"label": c, "value": c} for c in FOUNDATION_COURSES],
+                    multi=True,
+                    placeholder="Select any foundation courses you've already completed"
                 )
             ]), className="panel-card"),
             dbc.Card(dbc.CardBody([
                 html.Div("Submission rule", className="eyebrow"),
-                html.P("Rank six unique courses. Rank 1 is your highest preference."),
+                html.P(f"Rank {N_RANKS} unique courses. Rank 1 is your highest preference."),
+                html.P(
+                    "Completed courses determine which electives you're eligible to rank — "
+                    "a prerequisite you haven't finished blocks that course from being assigned.",
+                    className="small text-muted"
+                ),
                 html.Div("No solver runs when you submit.", className="callout")
             ]), className="panel-card mt-3")
         ], md=4),
@@ -170,7 +190,7 @@ student_page = html.Div([
                             placeholder=f"Select Rank {i}"
                         ))
                     ], align="center", className="g-2 mb-3")
-                    for i in range(1, 7)
+                    for i in range(1, N_RANKS + 1)
                 ]),
                 dbc.Button("Submit Preferences", id="submit-preferences", color="primary", className="mt-2"),
                 html.Div(id="student-submit-msg", className="mt-3")
@@ -199,11 +219,38 @@ admin_page = html.Div([
                     options=[{"label": "Spring 2026", "value": "2026"}],
                     value="2026", clearable=False
                 )
-            ], md=3),
-            dbc.Col([dbc.Label("Max Phase 1 units"), dbc.Input(id="max-units", type="number", value=12)], md=3),
-            dbc.Col([dbc.Label("Minimum course load"), dbc.Input(id="min-courses", type="number", value=3)], md=3),
-            dbc.Col([dbc.Label("Fairness weight"), dbc.Input(id="fairness-weight", type="number", min=0, max=1, step=0.05, value=0.25)], md=3),
+            ], md=2),
+            dbc.Col([dbc.Label("Max Phase 1 units"), dbc.Input(id="max-units", type="number", value=12)], md=2),
+            dbc.Col([dbc.Label("Minimum course load"), dbc.Input(id="min-courses", type="number", value=3)], md=2),
+            dbc.Col([dbc.Label("Fairness weight"), dbc.Input(id="fairness-weight", type="number", min=0, max=1, step=0.05, value=0.25)], md=2),
+            dbc.Col([dbc.Label("Seniority multiplier"), dbc.Input(id="senior-mult", type="number", min=1, max=2, step=0.1, value=1.5)], md=2),
+            dbc.Col([
+                dbc.Label("MAnalytics quota"),
+                dbc.RadioItems(
+                    id="quota-mode",
+                    options=[
+                        {"label": "Reserved seats", "value": "reserved"},
+                        {"label": "Hard minimum", "value": "hard_min"},
+                        {"label": "Off", "value": "off"},
+                    ],
+                    value="reserved",
+                )
+            ], md=2),
         ], className="g-3"),
+        html.Hr(),
+        dbc.Label("Constraints in effect"),
+        dbc.Checklist(
+            id="constraint-toggles",
+            options=[
+                {"label": "Capacity (Eq 2)", "value": "capacity"},
+                {"label": "Unit cap (Eq 3)", "value": "units"},
+                {"label": "Time conflicts (Eq 4)", "value": "conflicts"},
+                {"label": "Minimum load (Eq 5)", "value": "minload"},
+                {"label": "Core courses consume units", "value": "core"},
+            ],
+            value=["capacity", "units", "conflicts", "minload", "core"],
+            inline=True, switch=True, className="mb-3"
+        ),
         html.Hr(),
         html.Div([
             html.Div([
@@ -359,20 +406,22 @@ def render_page(pathname):
     State("student-id", "value"),
     State("program-select", "value"),
     State("graduating-check", "value"),
-    *[State(f"rank-{i}", "value") for i in range(1, 7)],
+    State("completed-courses", "value"),
+    *[State(f"rank-{i}", "value") for i in range(1, N_RANKS + 1)],
     prevent_initial_call=True
 )
-def submit_preferences(n, sid, program, graduating, *ranks):
+def submit_preferences(n, sid, program, graduating, completed, *ranks):
     if not sid or not sid.strip():
         return dbc.Alert("Please enter a student ID.", color="danger"), {}
     if any(r is None for r in ranks):
-        return dbc.Alert("Please complete all six rankings.", color="danger"), {}
+        return dbc.Alert(f"Please complete all {N_RANKS} rankings.", color="danger"), {}
     if len(set(ranks)) != len(ranks):
         return dbc.Alert("Each course may only appear once.", color="danger"), {}
     payload = {
         "student_id": sid.strip(),
         "program": program,
         "graduating": "yes" in (graduating or []),
+        "completed": completed or [],
         "ranking": list(ranks)
     }
     return dbc.Alert(
