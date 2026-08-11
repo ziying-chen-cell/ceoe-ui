@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from dash import Dash, dcc, html, Input, Output, State, dash_table, ctx, ALL
+from dash import Dash, dcc, html, Input, Output, State, dash_table, ctx
 import dash_bootstrap_components as dbc
 import pandas as pd
 from pathlib import Path
@@ -33,12 +33,21 @@ def section_title(title, subtitle=None):
         html.P(subtitle, className="section-subtitle") if subtitle else None
     ], className="mb-3")
 
+PAGE_PATHS = {
+    "home": "/",
+    "phase1-student": "/student-ranking",
+    "phase1-admin": "/admin-optimization",
+    "phase1-results": "/initial-results",
+    "phase2-student": "/my-enrollment",
+    "phase2-adjust": "/dynamic-adjustment",
+}
+PATH_TO_PAGE = {path: page for page, path in PAGE_PATHS.items()}
+
 def nav_button(label, page, icon):
-    return dbc.Button(
+    return dcc.Link(
         [html.Span(icon, className="me-2"), label],
-        id={"type": "nav-btn", "page": page},
-        color="link",
-        className="nav-btn w-100 text-start"
+        href=PAGE_PATHS[page],
+        className="nav-btn w-100 text-start d-block"
     )
 
 sidebar = html.Div([
@@ -103,13 +112,13 @@ home_page = html.Div([
             html.Div("PHASE 1", className="eyebrow"),
             html.H4("Static preference elicitation"),
             html.P("Students submit ranked preferences during a collection window. No optimization is triggered at submission time."),
-            dbc.Button("Open Student Ranking", id="home-p1", color="primary")
+            dcc.Link("Open Student Ranking", href=PAGE_PATHS["phase1-student"], className="btn btn-primary")
         ]), className="panel-card h-100"), md=6),
         dbc.Col(dbc.Card(dbc.CardBody([
             html.Div("PHASE 2", className="eyebrow"),
             html.H4("Dynamic adjustment"),
             html.P("After initial assignment, students manage add/drop activity and may set conditional smart swap rules."),
-            dbc.Button("Open Dynamic Adjustment", id="home-p2", color="warning", className="text-dark")
+            dcc.Link("Open Dynamic Adjustment", href=PAGE_PATHS["phase2-adjust"], className="btn btn-warning text-dark")
         ]), className="panel-card h-100"), md=6)
     ], className="g-3")
 ])
@@ -331,7 +340,7 @@ pages = {
 }
 
 app.layout = html.Div([
-    dcc.Store(id="current-page", data="home"),
+    dcc.Location(id="url", refresh=False),
     dcc.Store(id="submitted-preferences", data={}),
     sidebar,
     html.Div([
@@ -340,29 +349,12 @@ app.layout = html.Div([
     ], className="main-area")
 ], className="app-shell")
 
-# FIX: use Dash ALL wildcard rather than placing a Python list inside the component ID.
-@app.callback(
-    Output("current-page", "data"),
-    Input({"type": "nav-btn", "page": ALL}, "n_clicks"),
-    Input("home-p1", "n_clicks"),
-    Input("home-p2", "n_clicks"),
-    prevent_initial_call=True
-)
-def change_page(_nav_clicks, p1, p2):
-    trigger = ctx.triggered_id
-    if trigger == "home-p1":
-        return "phase1-student"
-    if trigger == "home-p2":
-        return "phase2-adjust"
-    if isinstance(trigger, dict):
-        return trigger.get("page", "home")
-    return "home"
-
 @app.callback(
     Output("page-content", "children"),
-    Input("current-page", "data")
+    Input("url", "pathname")
 )
-def render_page(page):
+def render_page(pathname):
+    page = PATH_TO_PAGE.get(pathname, "home")
     return pages.get(page, home_page)
 
 @app.callback(
